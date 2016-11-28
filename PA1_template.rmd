@@ -1,0 +1,210 @@
+---
+title: "The Stepping Habits of Anonymous"
+author: "kb"
+date: "November 27, 2016"
+output: html_document
+---
+
+This report analyzes data from Anonymous's walking habits.
+
+First, we'll need to load the data from our working directory:
+
+```{r}
+setwd("/home/thea/Desktop/R working directory/ReproResearch/Wk2")
+ourfile <- read.csv("activity.csv", header=TRUE)
+```
+
+# 1) What is the mean total number of steps taken per day?
+
+Our first question is how many total steps Anonymous walks per day. What are the mean and median steps per day?
+
+We can generate three lists to show us this information:
+
+```{r}
+sumsteps <- aggregate(ourfile$steps~ourfile$date, ourfile, sum)
+meansteps <- aggregate(ourfile$steps~ourfile$date, ourfile, mean)
+mediansteps <- aggregate(ourfile$steps~ourfile$date, ourfile, median)
+
+colnames(sumsteps) <- c("Date", "TotalSteps")
+meansteps[,2] <- as.integer(meansteps[,2])
+
+stepswnas <- data.frame(sumsteps,meansteps[,2],mediansteps[,2])
+colnames(stepswnas) <- c("Date", "Total Steps", "Average Steps", 
+                         "Median Steps")
+```
+
+Here are the first 20 rows of data compiled into one table. Notice rows with missing data have been omitted:
+
+```{r stepswnas, echo=FALSE}
+head(stepswnas,20)
+```
+
+Here are the Total Steps per day depicted in a histogram:
+
+```{r}
+barplot(sumsteps[,2], names.arg=sumsteps[,1],
+        main="Total Steps per Day, excluding NAs",
+        xlab="Date", ylab="Steps")
+```
+
+# 2) What is the average daily activity pattern?
+
+Next, let's study the average number of steps taken per 5-minute interval. This will show at which times of day Anonymous is most active, on average.
+
+```{r}
+stepsperint <- aggregate(ourfile$steps~ourfile$interval, ourfile, mean)
+colnames(stepsperint) <- c("interval","AvgSteps")
+```
+
+Here is a time series plot of when Anonymous is most active:
+
+```{r}
+plot(stepsperint$interval, stepsperint$AvgSteps, type="l", 
+     xlab="5-min interval", ylab="Steps taken", 
+     main="Time lapse of average steps over 24 hours")
+```
+
+At which time of day is Anonymous most active, on average?
+
+```{r}
+maxstep <- which(stepsperint[,2] == max(stepsperint[,2])) #placeholder of max steps
+int <- stepsperint[maxstep,1]
+timehr <- paste(substr(int,1,1),":",substr(int,2,3)," am", sep="")
+```
+
+Thus, Anonymous takes the most steps, on average, around **`r timehr`**.
+
+# 3) Inputing missing values
+
+Now we'd like to address missing data points. First, let's identify all missing values in our data.
+
+```{r}
+nas <- ourfile[is.na(ourfile$steps),] #data frame with all na values
+totalnas <- length(nas[,1])
+percentnas <- round(totalnas/length(ourfile[,1])*100,2)
+```
+
+It looks like there are `r totalnas` missing rows in our data, or `r percentnas`% of all the rows. We can fill these in with the average steps per 5-min interval that Anonymous usually walks on other days.
+
+```{r}
+#1 create big vector w "answer" column adjacent to Steps + reorder
+answerkey <- merge(ourfile,stepsperint)
+answerkey <- answerkey[with(answerkey, order(date,interval)),]
+
+#2 if steps = na, replace w answerkey
+fullsteps <- with(answerkey,ifelse(is.na(steps),AvgSteps,steps))
+
+#3 stitch "fullsteps" back into full data frame
+complete <- data.frame(answerkey[,3],answerkey[,1],fullsteps)
+complete[,3] <- as.integer(complete[,3])
+colnames(complete) <- c("Date", "Interval", "Steps")
+```
+
+The results is a "filled in" data set, where N/A values have been replaced by the average value for that interval. Here is a sample of the top 20 rows:
+
+```{r complete, echo=FALSE}
+head(complete,20)
+```
+
+Now, let's calculate the Total, Average, and Median steps taken per day of this complete data set:
+
+```{r}
+sumfullsteps <- aggregate(complete$Steps~complete$Date, complete, sum)
+meanfullsteps <- aggregate(complete$Steps~complete$Date, complete, mean)
+medianfullsteps <- aggregate(complete$Steps~complete$Date, complete, median)
+
+sumfullsteps[,2] <- sapply(sumfullsteps[,2],as.integer)
+meanfullsteps[,2] <- sapply(meanfullsteps[,2],as.integer)
+medianfullsteps[,2] <- sapply(medianfullsteps[,2],as.integer)
+
+colnames(sumfullsteps) <- c("Date","TotSteps")
+colnames(meanfullsteps) <- c("Date", "AvgSteps")
+colnames(medianfullsteps) <- c("Date","MedSteps")
+```
+
+We can compare the "adjusted" data to the original data set with NAs.
+
+```{r}
+#1 clean data
+colnames(stepswnas) <- c("Date", "TotStepsNA", "AvgStepsNA", "MedStepsNA")
+stepswnas[,3] <- as.integer(stepswnas[,3])
+
+#2 merge all data frames
+merge1 <- merge(stepswnas, sumfullsteps, all=T)
+merge2 <- merge(meanfullsteps, medianfullsteps)
+allstats <- merge(merge1,merge2, all=T)
+
+#3 reorder columns for clarity
+allstats <- allstats[,c(1,2,5,3,6,4,7)]
+```
+
+Which gives us the following data frame, where headers including 'NA' are the original, unadjusted data. Here is an excerpt of the top 20 rows:
+
+```{r allstats, echo=F}
+head(allstats,20)
+```
+
+```{r, include=F}
+stepsthrustudyNA <- sum(allstats$TotStepsNA, na.rm=T)
+stepsthrustudy <- sum(allstats$TotSteps)
+avgstepsthrustudyNA <- as.integer(stepsthrustudyNA/length(allstats[,1]))
+avgstepsthrustudy <- as.integer(stepsthrustudy/length(allstats[,1]))
+```
+
+Notice the Total Steps taken across the course of the study increase from `r stepsthrustudyNA` with NAs included, to `r stepsthrustudy` with NA values estimated from remaining data. This amounts to an average of `r avgstepsthrustudyNA` steps per day with NAs included, and `r avgstepsthrustudy` steps per day with "filled in" data.
+
+Finally, let's examine a histogram of the Total Steps per day.
+
+```{r}
+with(sumfullsteps,{
+    barplot(TotSteps, names.arg=Date, 
+            col=adjustcolor("blue",alpha.f=.5),
+            main="Total Steps per Day",
+            xlab="Date", ylab="Steps")
+})
+```
+
+# 4) Are there differences in activity patterns between weekdays and weekends?
+
+First, let's add a column to our "filled in" data frame indicating whether each date is a weekday or weekend.
+
+```{r}
+#1 column for which day of week each date is
+complete[,4] <- sapply(as.Date(complete[,1]),weekdays)
+colnames(complete)[4] <- "DayofWeek"
+complete[,3] <- as.integer(complete[,3])
+
+#2 column: weekday or weekend?
+complete[,5] <- ifelse(complete[,4]=="Saturday" | 
+                       complete[,4]=="Sunday", "weekend", 
+                       "weekday")
+colnames(complete)[5] <- "DayType"
+```
+
+Now we can prepare our data for visualization by aggregating it by weekday vs weekend and 5-min interval:
+
+```{r}
+wklysteps <- aggregate(complete$Steps~complete$Interval+DayType, complete, mean)
+wklysteps[,3] <- as.integer(wklysteps[,3])
+colnames(wklysteps) <- c("Interval", "DayType", "Steps")
+```
+
+Here is the code to plot a time series of when Anonymous is most active, segregated by weekday vs weekend:
+
+```{r}
+library(ggplot2)
+wkdayplot <- 
+    with(wklysteps,{
+        qplot(Interval, Steps, facets = DayType~., geom="line",
+              main="Average Steps Taken by Weekday/Weekend")
+    })
+```
+
+And the plot itself:
+
+```{r wkdayplot, echo=F}
+wkdayplot
+```
+
+# THE END
+
